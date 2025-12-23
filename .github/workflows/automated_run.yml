@@ -1,65 +1,68 @@
-name: Manual Maven Test Execution
+name: Automated Manual Test Run
 
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Select branch to run tests'
-        required: true
-        default: 'main'
-
-      cucumber_tags:
-        description: 'Cucumber tags (e.g. @smoke or @regression)'
-        required: false
-        default: '@smoke'
-
       browser:
-        description: 'Browser to run tests'
+        description: "Browser to run tests"
         required: true
-        default: 'chrome'
+        default: chrome
         type: choice
         options:
           - chrome
           - firefox
           - edge
           - all
+          
+      tags:
+        description: "Cucumber tags (e.g. @smoke, @regression)"
+        required: false
+        type: string
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, dev, eng]
+    timeout-minutes: 90
 
     strategy:
+      fail-fast: false
       matrix:
         browser: [chrome, firefox, edge]
 
     steps:
+      - name: Set date and repo name
+        run: |
+          echo "DATE_STAMP=$(date +'%Y-%m-%d_%H%M')" >> $GITHUB_ENV
+          echo "REPO_NAME=$(echo ${{ github.repository }} | cut -d'/' -f2)" >> $GITHUB_ENV
+
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
-
-      - name: Set up JDK 11
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '11'
 
       - name: Cache Maven dependencies
         uses: actions/cache@v4
         with:
-          path: ~/.m2
-          key: maven-${{ hashFiles('**/pom.xml') }}
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
       - name: Run Maven Tests
         if: ${{ inputs.browser == 'all' || matrix.browser == inputs.browser }}
         run: |
-          mvn clean test \
-          -Dcucumber.tags="${{ inputs.cucumber_tags }}" \
-          -Dbrowser=${{ matrix.browser }}
+          export JAVA_HOME=/opt/openjdk
+          export MAVEN_HOME=/opt/apache-maven
+          export PATH=$PATH:$MAVEN_HOME/bin:$JAVA_HOME/bin
 
-      - name: Upload Test Reports
-        if: always()
+          mvn clean test \
+            "-Dcucumber.filter.tags=${{ inputs.tags }}" \
+            -Dbrowser=${{ matrix.browser }} \
+            -Dheadless=true
+
+      - name: Upload failure reports
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-report-${{ matrix.browser }}
-          path: target/
+          name: ${{ env.REPO_NAME }}-failure-report-${{ matrix.browser }}_${{ env.DATE_STAMP }}
+          path: |
+            target
+            !target/test-classes
