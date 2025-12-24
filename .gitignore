@@ -1,0 +1,42 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment variables
+.env
+
+# Java
+*.class
+target/
+*.jar
+*.war
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+
+# Gradle
+.gradle/
+build/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Test reports
+test-output/
+allure-results/
+allure-report/
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Selenium / Playwright
+screenshots/
+videos/
+downloads/
