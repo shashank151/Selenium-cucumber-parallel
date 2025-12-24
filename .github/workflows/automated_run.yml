@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       browser:
-        description: "Browser to run tests"
+        description: "Browser to run tests on (default: chrome)"
         required: true
         default: chrome
         type: choice
@@ -19,15 +19,59 @@ on:
         required: false
         type: string
 
+      headless:
+        description: "Run in headless mode"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+      parallel:
+        description: "Enable parallel test execution"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+      threads:
+        description: "Number of parallel threads (if parallel enabled)"
+        required: false
+        default: "4"
+        type: choice
+        options:
+          - "2"
+          - "4"
+          - "6"
+          - "8"
+
 jobs:
+  determine-browsers:
+    runs-on: ubuntu-latest
+    outputs:
+      browsers: ${{ steps.set-browsers.outputs.browsers }}
+    steps:
+      - name: Determine browsers to test
+        id: set-browsers
+        run: |
+          if [ "${{ inputs.browser }}" == "all" ]; then
+            echo "browsers=[\"chrome\",\"firefox\",\"edge\"]" >> $GITHUB_OUTPUT
+          else
+            echo "browsers=[\"${{ inputs.browser }}\"]" >> $GITHUB_OUTPUT
+          fi
+
   test:
+    needs: determine-browsers
     runs-on: [self-hosted, linux, x64, dev, eng]
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     strategy:
       fail-fast: false
       matrix:
-        browser: [chrome, firefox, edge]
+        browser: ${{ fromJson(needs.determine-browsers.outputs.browsers) }}
 
     steps:
       - name: Set date and repo name
@@ -46,17 +90,36 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Run Maven Tests
-        if: ${{ inputs.browser == 'all' || matrix.browser == inputs.browser }}
+      - name: Run Maven Tests on ${{ matrix.browser }}
         run: |
           export JAVA_HOME=/opt/openjdk
           export MAVEN_HOME=/opt/apache-maven
           export PATH=$PATH:$MAVEN_HOME/bin:$JAVA_HOME/bin
 
+          PARALLEL_FLAG="false"
+          THREAD_COUNT="4"
+          
+          if [ "${{ inputs.parallel }}" == "true" ]; then
+            PARALLEL_FLAG="true"
+            THREAD_COUNT="${{ inputs.threads }}"
+          fi
+
           mvn clean test \
             "-Dcucumber.filter.tags=${{ inputs.tags }}" \
             -Dbrowser=${{ matrix.browser }} \
-            -Dheadless=true
+            -Dheadless=${{ inputs.headless }} \
+            -Dparallel.enabled=$PARALLEL_FLAG \
+            -Dparallel.threads=$THREAD_COUNT
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.REPO_NAME }}-report-${{ matrix.browser }}_${{ env.DATE_STAMP }}
+          path: |
+            target/cucumber-reports
+            target/surefire-reports
+          retention-days: 30
 
       - name: Upload failure reports
         if: failure()

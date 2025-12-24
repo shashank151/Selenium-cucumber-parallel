@@ -10,11 +10,17 @@ import org.openqa.selenium.edge.EdgeDriver;
 import org.openqa.selenium.edge.EdgeOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.google.gson.JsonObject;
 
 public class DriverFactory {
     
     private static final Logger logger = LoggerFactory.getLogger(DriverFactory.class);
     private static final ThreadLocal<WebDriver> driverThreadLocal = new ThreadLocal<>();
+    private static BrowserConfig browserConfig;
+
+    static {
+        browserConfig = new BrowserConfig();
+    }
 
     public static WebDriver initializeDriver(String browser) {
         WebDriver driver = null;
@@ -38,7 +44,27 @@ public class DriverFactory {
                     driver = initializeChromeDriver();
             }
             
-            driver.manage().window().maximize();
+            // Set timeouts from configuration
+            driver.manage().timeouts().implicitlyWait(java.time.Duration.ofSeconds(browserConfig.getImplicitWait()));
+            driver.manage().timeouts().pageLoadTimeout(java.time.Duration.ofSeconds(browserConfig.getPageLoadTimeout()));
+            
+            // Maximize or set window size
+            String windowSize = browserConfig.getWindowSize(browser);
+            if (!isHeadless()) {
+                driver.manage().window().maximize();
+            } else {
+                try {
+                    String[] dimensions = windowSize.split(",");
+                    org.openqa.selenium.Dimension size = new org.openqa.selenium.Dimension(
+                        Integer.parseInt(dimensions[0]), 
+                        Integer.parseInt(dimensions[1])
+                    );
+                    driver.manage().window().setSize(size);
+                } catch (Exception e) {
+                    logger.warn("Could not set window size: {}", e.getMessage());
+                }
+            }
+            
             driverThreadLocal.set(driver);
             
         } catch (Exception e) {
@@ -51,26 +77,86 @@ public class DriverFactory {
     private static WebDriver initializeChromeDriver() {
         WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
-        options.addArguments("--no-sandbox");
-        options.addArguments("--disable-dev-shm-usage");
-        options.addArguments("--start-maximized");
+        
+        // Load options from config
+        JsonObject chromeConfig = browserConfig.getBrowserOptions("chrome");
+        
+        // Add headless mode if enabled
+        if (isHeadless()) {
+            options.addArguments("--headless=new");
+        }
+        
+        // Add arguments from configuration
+        if (chromeConfig.has("arguments")) {
+            chromeConfig.getAsJsonArray("arguments").forEach(arg -> 
+                options.addArguments(arg.getAsString())
+            );
+        } else {
+            // Default arguments
+            options.addArguments("--no-sandbox");
+            options.addArguments("--disable-dev-shm-usage");
+            options.addArguments("--start-maximized");
+        }
+        
         return new ChromeDriver(options);
     }
 
     private static WebDriver initializeFirefoxDriver() {
         WebDriverManager.firefoxdriver().setup();
         FirefoxOptions options = new FirefoxOptions();
-        options.addArguments("-no-remote");
+        
+        // Load options from config
+        JsonObject firefoxConfig = browserConfig.getBrowserOptions("firefox");
+        
+        // Add headless mode if enabled
+        if (isHeadless()) {
+            options.addArguments("--headless");
+        }
+        
+        // Add arguments from configuration
+        if (firefoxConfig.has("arguments")) {
+            firefoxConfig.getAsJsonArray("arguments").forEach(arg -> 
+                options.addArguments(arg.getAsString())
+            );
+        } else {
+            // Default arguments
+            options.addArguments("-no-remote");
+        }
+        
         return new FirefoxDriver(options);
     }
 
     private static WebDriver initializeEdgeDriver() {
         WebDriverManager.edgedriver().setup();
         EdgeOptions options = new EdgeOptions();
-        options.addArguments("--no-sandbox");
-        options.addArguments("--disable-dev-shm-usage");
+        
+        // Load options from config
+        JsonObject edgeConfig = browserConfig.getBrowserOptions("edge");
+        
+        // Add headless mode if enabled
+        if (isHeadless()) {
+            options.addArguments("--headless=new");
+        }
+        
+        // Add arguments from configuration
+        if (edgeConfig.has("arguments")) {
+            edgeConfig.getAsJsonArray("arguments").forEach(arg -> 
+                options.addArguments(arg.getAsString())
+            );
+        } else {
+            // Default arguments
+            options.addArguments("--no-sandbox");
+            options.addArguments("--disable-dev-shm-usage");
+        }
+        
         return new EdgeDriver(options);
     }
+
+    private static boolean isHeadless() {
+        String headless = System.getProperty("headless", "false");
+        return "true".equalsIgnoreCase(headless);
+    }
+
 
     public static WebDriver getDriver() {
         return driverThreadLocal.get();
@@ -93,3 +179,4 @@ public class DriverFactory {
         }
     }
 }
+

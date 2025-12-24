@@ -20,6 +20,11 @@
         <testng.version>7.9.0</testng.version>
         <webdrivermanager.version>5.6.2</webdrivermanager.version>
         <maven.surefire.version>3.0.0</maven.surefire.version>
+        <cucumber.filter.tags>${cucumber.tags}</cucumber.filter.tags>
+        <browser>chrome</browser>
+        <headless>false</headless>
+        <parallel.threads>4</parallel.threads>
+        <parallel.enabled>false</parallel.enabled>
     </properties>
 
     <dependencies>
@@ -98,11 +103,23 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.version}</version>
                 <configuration>
+                    <!-- TestNG Suite Configuration -->
                     <suiteXmlFiles>
                         <suiteXmlFile>testng.xml</suiteXmlFile>
                     </suiteXmlFiles>
-                    <parallel>all</parallel>
-                    <threadCount>4</threadCount>
+                    
+                    <!-- Parallel execution configuration -->
+                    <!-- Default: parallel=false (sequential), can be overridden with -Dparallel.enabled=true -->
+                    <parallel>${parallel.enabled}</parallel>
+                    <threadCount>${parallel.threads}</threadCount>
+                    <reuseForks>false</reuseForks>
+                    <argLine>-Xmx1024m -XX:MaxPermSize=256m</argLine>
+                    
+                    <systemPropertyVariables>
+                        <cucumber.filter.tags>${cucumber.tags}</cucumber.filter.tags>
+                        <browser>${browser}</browser>
+                        <headless>${headless}</headless>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
 
